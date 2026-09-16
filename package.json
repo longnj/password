@@ -5,9 +5,46 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test"
+    "test": "node --test",
+    "dist": "electron-builder --win nsis portable"
   },
   "devDependencies": {
-    "electron": "^44.4.1"
-  }
+    "electron": "^44.4.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.longnj.passvault",
+    "productName": "PassVault",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PassVault"
+    }
+  },
+  "author": "longnj"
 }
