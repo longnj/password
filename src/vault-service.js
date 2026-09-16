@@ -1,4 +1,4 @@
-﻿const fs = require('node:fs');
+const fs = require('node:fs');
 const nodeCrypto = require('node:crypto');
 const crypto = require('./crypto');
 const {
@@ -9,6 +9,11 @@ const {
 } = require('./vault-policy');
 const { writeVaultFileAtomically } = require('./storage');
 
+const ENTRY_TAGS = new Set([
+  '网站', 'SSH', 'MySQL', 'PostgreSQL', 'SQL Server', 'MongoDB', 'Redis', 'Oracle',
+  'API', '邮箱', 'RDP', 'VNC', 'FTP', 'SFTP', 'Wi-Fi', '银行卡', '证件', '软件许可', '安全笔记', '自定义'
+]);
+
 function formatLockedError(retryAfterMs) {
   const seconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
   return `尝试次数过多，请 ${seconds} 秒后重试`;
@@ -18,22 +23,57 @@ function normalizeOptionalText(value) {
   return typeof value === 'string' ? value : '';
 }
 
+function normalizeTag(value) {
+  if (value === undefined || value === null || value === '') return '网站';
+  if (typeof value !== 'string') return null;
+
+  const tag = value.trim();
+  return ENTRY_TAGS.has(tag) ? tag : null;
+}
+
+function normalizePort(value) {
+  if (value === undefined || value === null || value === '') return { value: null };
+
+  const port = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { invalid: true };
+  }
+  return { value: port };
+}
+
 function createEntryForSave(entry, existing, timestamp) {
   const name = normalizeOptionalText(entry.name).trim();
   const password = normalizeOptionalText(entry.password);
-  if (!name || !password) return null;
+  if (!name || !password) {
+    return { error: '条目格式不正确' };
+  }
+
+  const tag = normalizeTag(entry.tag);
+  if (tag === null) {
+    return { error: '不支持的标签' };
+  }
+
+  const port = normalizePort(entry.port);
+  if (port.invalid) {
+    return { error: '端口必须在 1-65535 之间' };
+  }
 
   return {
-    id: entry.id,
-    name,
-    url: normalizeOptionalText(entry.url),
-    username: normalizeOptionalText(entry.username),
-    password,
-    category: normalizeOptionalText(entry.category),
-    notes: normalizeOptionalText(entry.notes),
-    favorite: Boolean(entry.favorite),
-    createdAt: existing ? existing.createdAt : timestamp,
-    updatedAt: timestamp
+    entry: {
+      id: entry.id,
+      name,
+      url: normalizeOptionalText(entry.url),
+      host: normalizeOptionalText(entry.host).trim(),
+      port: port.value,
+      username: normalizeOptionalText(entry.username),
+      password,
+      category: normalizeOptionalText(entry.category),
+      tag,
+      notes: normalizeOptionalText(entry.notes),
+      favorite: Boolean(entry.favorite),
+      createdAt: existing ? existing.createdAt : timestamp,
+      updatedAt: timestamp
+    }
   };
 }
 
@@ -173,14 +213,15 @@ function createVaultService({
       return { success: false, error: '条目不存在' };
     }
 
-    const normalizedEntry = createEntryForSave(
+    const normalizedResult = createEntryForSave(
       entry,
       existingIndex === -1 ? null : nextData.entries[existingIndex],
       updatedAt
     );
-    if (!normalizedEntry) {
-      return { success: false, error: '条目格式不正确' };
+    if (normalizedResult.error) {
+      return { success: false, error: normalizedResult.error };
     }
+    const normalizedEntry = normalizedResult.entry;
 
     if (existingIndex === -1) {
       normalizedEntry.id = nodeCrypto.randomUUID();
@@ -276,4 +317,3 @@ function createVaultService({
 module.exports = {
   createVaultService
 };
-

@@ -1,4 +1,4 @@
-﻿const test = require('node:test');
+const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -230,6 +230,9 @@ test('saveEntry creates and updates entries with stable timestamps', () => {
         name: 'GitHub',
         username: 'chen',
         password: 'secret',
+        host: '',
+        port: null,
+        tag: '网站',
         category: '工作',
         notes: '',
         url: '',
@@ -387,3 +390,107 @@ test('exportEncrypted returns the current vault encrypted with its active master
   }
 });
 
+
+test('saveEntry normalizes one tag and preserves connection fields', () => {
+  const { root, filePath } = createTestVault();
+  const service = createVaultService({ filePath, writeFile: () => {} });
+  const timestamp = '2026-09-16T00:00:00.000Z';
+
+  try {
+    service.create('master-password');
+    const result = service.saveEntry({
+      name: 'Production PostgreSQL',
+      username: 'app_user',
+      password: 'secret',
+      host: '10.0.0.20',
+      port: 5432,
+      tag: ' PostgreSQL '
+    }, timestamp);
+
+    assert.equal(result.success, true);
+    assert.equal(result.entry.tag, 'PostgreSQL');
+    assert.equal(result.entry.host, '10.0.0.20');
+    assert.equal(result.entry.port, 5432);
+    assert.deepEqual(service.getData().entries[0], result.entry);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('saveEntry rejects unknown tags and invalid port ranges', () => {
+  const { root, filePath } = createTestVault();
+  const service = createVaultService({ filePath, writeFile: () => {} });
+
+  try {
+    service.create('master-password');
+
+    const malformedTag = service.saveEntry({
+      name: 'Bad tag',
+      password: 'secret',
+      tag: 123
+    });
+    assert.equal(malformedTag.success, false);
+    assert.equal(malformedTag.error, '不支持的标签');
+
+    const unknownTag = service.saveEntry({
+      name: 'Unknown tag',
+      password: 'secret',
+      tag: 'NotSupported'
+    });
+    assert.equal(unknownTag.success, false);
+    assert.equal(unknownTag.error, '不支持的标签');
+
+    for (const port of [0, -1, 65536, 'abc']) {
+      const invalid = service.saveEntry({
+        name: 'Bad port ' + port,
+        password: 'secret',
+        tag: 'SSH',
+        host: '192.168.1.10',
+        port
+      });
+      assert.equal(invalid.success, false, String(port));
+      assert.equal(invalid.error, '端口必须在 1-65535 之间');
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('saveEntry defaults legacy entries to the website tag', () => {
+  const { root, filePath } = createTestVault();
+  const legacyEntry = {
+    id: 'legacy-entry',
+    name: 'GitHub',
+    url: 'https://github.com',
+    username: 'chen_dev',
+    password: 'secret',
+    category: '工作',
+    notes: '',
+    favorite: true,
+    createdAt: '2026-09-15T00:00:00.000Z',
+    updatedAt: '2026-09-15T00:00:00.000Z'
+  };
+  fs.writeFileSync(filePath, crypto.encrypt({
+    version: 1,
+    entries: [legacyEntry],
+    createdAt: '2026-09-15T00:00:00.000Z'
+  }, 'master-password'));
+  const service = createVaultService({ filePath, writeFile: () => {} });
+
+  try {
+    assert.equal(service.unlock('master-password').success, true);
+    const saved = service.saveEntry(
+      { ...legacyEntry, name: 'GitHub Updated' },
+      '2026-09-16T00:00:00.000Z'
+    );
+
+    assert.equal(saved.success, true);
+    assert.equal(saved.entry.tag, '网站');
+    assert.equal(saved.entry.host, '');
+    assert.equal(saved.entry.port, null);
+    assert.equal(saved.entry.createdAt, legacyEntry.createdAt);
+    assert.equal(saved.entry.updatedAt, '2026-09-16T00:00:00.000Z');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

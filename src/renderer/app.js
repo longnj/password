@@ -1,4 +1,4 @@
-﻿function calculateStrength(length, variety) {
+function calculateStrength(length, variety) {
   var score = length * variety;
   if (score < 30) return { level: '弱', score: score };
   if (score < 60) return { level: '中等', score: score };
@@ -8,6 +8,29 @@ let entries = [];
 let currentCategory = 'all';
 let editingId = null;
 let lastGeneratedPassword = '';
+
+const ENTRY_TAGS = [
+  '网站', 'SSH', 'MySQL', 'PostgreSQL', 'SQL Server', 'MongoDB', 'Redis', 'Oracle',
+  'API', '邮箱', 'RDP', 'VNC', 'FTP', 'SFTP', 'Wi-Fi', '银行卡', '证件', '软件许可', '安全笔记', '自定义'
+];
+const TAG_DEFAULT_PORTS = {
+  MySQL: 3306,
+  PostgreSQL: 5432,
+  'SQL Server': 1433,
+  MongoDB: 27017,
+  Redis: 6379,
+  Oracle: 1521,
+  SSH: 22,
+  SFTP: 22,
+  RDP: 3389,
+  VNC: 5900,
+  FTP: 21
+};
+const HOST_TAGS = new Set([
+  'SSH', 'MySQL', 'PostgreSQL', 'SQL Server', 'MongoDB', 'Redis', 'Oracle',
+  '邮箱', 'RDP', 'VNC', 'FTP', 'SFTP'
+]);
+let selectedTag = '网站';
 
 // 初始化
 async function init() {
@@ -27,6 +50,7 @@ async function init() {
   document.querySelectorAll('.sidebar-item[data-category]').forEach((el) => {
     el.addEventListener('click', () => selectCategory(el));
   });
+  initTagSelector();
 
   // 监听锁定事件
   window.vault.onLocked(() => {
@@ -125,7 +149,9 @@ function renderEntries() {
     filtered = filtered.filter((e) =>
       (e.name || '').toLowerCase().includes(search) ||
       (e.username || '').toLowerCase().includes(search) ||
-      (e.url || '').toLowerCase().includes(search)
+      (e.url || '').toLowerCase().includes(search) ||
+      (e.host || '').toLowerCase().includes(search) ||
+      (e.tag || '').toLowerCase().includes(search)
     );
   }
 
@@ -163,14 +189,23 @@ function escapeHtml(str) {
 
 function entryHtml(e) {
   const favIcon = e.favorite ? '<span class="item-fav">⭐</span>' : '';
+  const displayTag = e.tag || '网站';
+  const tagHtml = '<span class="item-tag">' + escapeHtml(displayTag) + '</span>';
+  const connection = e.host
+    ? e.host + (e.port ? ':' + e.port : '')
+    : '';
+  const address = e.url || connection;
+  const metaParts = [e.username || '', address].filter(Boolean);
+
   return '<div class="password-item">' +
     getFavicon(e.name) +
     '<div class="item-info">' +
       '<div class="item-name">' + escapeHtml(e.name) + ' ' + favIcon + '</div>' +
       '<div class="item-meta">' +
-        '<span class="item-username">' + escapeHtml(e.username) + '</span>' +
-        (e.url ? '<span>·</span><span>' + escapeHtml(e.url) + '</span>' : '') +
+        metaParts.map((part) => '<span>' + escapeHtml(part) + '</span>').join('<span>·</span>') +
+
       '</div>' +
+      '<div class="item-tags">' + tagHtml + '</div>' +
     '</div>' +
     '<div class="item-actions">' +
       '<button class="icon-btn" title="复制密码" onclick="copyEntryPassword(\'' + e.id + '\')">📋</button>' +
@@ -200,16 +235,50 @@ async function toggleFavorite(id) {
   }
 }
 
+function getEntryTag(entry) {
+  return entry && ENTRY_TAGS.includes(entry.tag) ? entry.tag : '网站';
+}
+
+function initTagSelector() {
+  const select = document.getElementById('edit-tag');
+  select.innerHTML = ENTRY_TAGS.map((tag) => '<option value="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '</option>').join('');
+  select.addEventListener('change', () => {
+    selectedTag = select.value;
+    updateTagDrivenFields(true, true);
+  });
+}
+
+function getDefaultPort(tag) {
+  return TAG_DEFAULT_PORTS[tag] || '';
+}
+
+function updateTagDrivenFields(fillDefaultPort, overwriteDefaultPort) {
+  const usesHost = HOST_TAGS.has(selectedTag);
+  document.getElementById('edit-url-group').style.display = usesHost ? 'none' : '';
+  document.getElementById('edit-connection-row').style.display = usesHost ? '' : 'none';
+  document.getElementById('edit-url-label').textContent = selectedTag === 'API' ? '服务地址' : '网址';
+
+  const portInput = document.getElementById('edit-port');
+  if (fillDefaultPort && usesHost && (overwriteDefaultPort || !portInput.value)) {
+    portInput.value = getDefaultPort(selectedTag);
+  }
+}
+
 function openEditModal(id) {
   editingId = id || null;
   const entry = id ? entries.find((e) => e.id === id) : null;
   document.getElementById('edit-modal-title').textContent = entry ? '编辑密码' : '添加新密码';
   document.getElementById('edit-name').value = entry ? entry.name : '';
   document.getElementById('edit-url').value = entry ? entry.url : '';
+  document.getElementById('edit-host').value = entry ? entry.host : '';
+  document.getElementById('edit-port').value = entry && entry.port != null ? entry.port : '';
   document.getElementById('edit-username').value = entry ? entry.username : '';
   document.getElementById('edit-category').value = entry ? entry.category : '工作';
   document.getElementById('edit-password').value = entry ? entry.password : '';
   document.getElementById('edit-notes').value = entry ? entry.notes : '';
+  selectedTag = getEntryTag(entry);
+  document.getElementById('edit-tag').value = selectedTag;
+  updateTagDrivenFields(true);
   document.getElementById('edit-modal').style.display = 'flex';
   document.getElementById('edit-name').focus();
 }
@@ -225,21 +294,33 @@ async function saveEntry() {
     showToast('请输入名称', 'error');
     return;
   }
+
   const password = document.getElementById('edit-password').value;
   if (!password) {
     showToast('请输入密码', 'error');
     return;
   }
+
+  const portValue = document.getElementById('edit-port').value.trim();
+  if (portValue && (!/^\d+$/.test(portValue) || Number(portValue) < 1 || Number(portValue) > 65535)) {
+    showToast('端口必须在 1-65535 之间', 'error');
+    return;
+  }
+
   const entry = {
     id: editingId || undefined,
     name: name,
     url: document.getElementById('edit-url').value.trim(),
+    host: HOST_TAGS.has(selectedTag) ? document.getElementById('edit-host').value.trim() : '',
+    port: HOST_TAGS.has(selectedTag) ? portValue : '',
     username: document.getElementById('edit-username').value.trim(),
     category: document.getElementById('edit-category').value,
     password: password,
+    tag: selectedTag,
     notes: document.getElementById('edit-notes').value.trim(),
     favorite: editingId ? (entries.find((e) => e.id === editingId) || {}).favorite || false : false,
   };
+
   const result = await window.vault.saveEntry(entry);
   if (result.success) {
     if (editingId) {
@@ -454,5 +535,3 @@ function showToast(msg, type) {
 
 // 启动
 init();
-
-

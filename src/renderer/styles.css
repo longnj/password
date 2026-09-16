@@ -316,3 +316,15 @@ textarea.input-field { resize: vertical; font-family: var(--sans); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* 条目标签 */
+.item-tags {
+  display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px;
+}
+.item-tag {
+  padding: 2px 7px; background: var(--surface-3); border: 1px solid var(--border);
+  border-radius: 999px; color: var(--text-dim); font-size: 11px; line-height: 18px;
+  white-space: nowrap;
+}
+.connection-host { flex: 2; min-width: 0; }
+.connection-port { flex: 0 0 108px; }

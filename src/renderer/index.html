@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN" data-theme="dark">
 <head>
   <meta charset="UTF-8">
@@ -69,7 +69,7 @@
       <div class="main-toolbar">
         <div class="search-box">
           <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
-          <input type="text" id="search-input" placeholder="搜索账号、网址或用户名…" oninput="renderEntries()">
+          <input type="text" id="search-input" placeholder="搜索名称、地址、用户名或标签…" oninput="renderEntries()">
         </div>
         <button class="btn-add" onclick="openEditModal()">+ 添加密码</button>
       </div>
@@ -101,8 +101,22 @@
         <input type="text" class="input-field" id="edit-name" placeholder="例如：GitHub">
       </div>
       <div class="input-group">
-        <label>网址</label>
+        <label>标签</label>
+        <select class="input-field" id="edit-tag" aria-label="条目标签"></select>
+      </div>
+      <div class="input-group" id="edit-url-group">
+        <label id="edit-url-label">网址</label>
         <input type="text" class="input-field" id="edit-url" placeholder="https://…">
+      </div>
+      <div class="field-row" id="edit-connection-row" style="display:none;">
+        <div class="input-group connection-host">
+          <label>主机地址</label>
+          <input type="text" class="input-field" id="edit-host" placeholder="192.168.1.10 或 db.example.com">
+        </div>
+        <div class="input-group connection-port">
+          <label>端口</label>
+          <input type="number" class="input-field" id="edit-port" min="1" max="65535" placeholder="自动">
+        </div>
       </div>
       <div class="field-row">
         <div class="input-group">
