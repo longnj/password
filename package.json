@@ -1,0 +1,13 @@
+{
+  "name": "passvault",
+  "version": "1.0.0",
+  "description": "本地密码管理器 - AES-256-GCM 加密",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "electron": "^44.4.1"
+  }
+}
